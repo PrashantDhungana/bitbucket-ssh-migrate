@@ -99,6 +99,34 @@ Use this repo when you have **many local Bitbucket clones** to update.
 
 ---
 
+## Notes — files you must update manually
+
+This script only changes **Git remotes** inside local clones (and optionally `known_hosts`). It does **not** edit project config files.
+
+You still need to update Bitbucket SSH URLs by hand (or with your own search/replace) in places such as:
+
+- `composer.json` / `composer.lock` — e.g. `repositories[].url` and lockfile `source.url` values like `git@bitbucket.org:...`
+- CI/CD configs (`bitbucket-pipelines.yml`, GitHub Actions, Jenkins, etc.)
+- Dockerfiles, deploy scripts, Makefiles, and other tooling that hard-codes `git@bitbucket.org` or `ssh://git@bitbucket.org`
+- Package manifests that vendor from Bitbucket over SSH (npm/git deps, private package registries, submodules listed in `.gitmodules`, etc.)
+
+Example Composer change:
+
+```diff
+- "url": "git@bitbucket.org:workspace/package.git"
++ "url": "git@ssh.bitbucket.org:workspace/package.git"
+```
+
+After updating `composer.json`, refresh the lockfile / reinstall so installs keep working after the cut-over. Rewriting remotes under `vendor/` alone is not enough — Composer will still use the URLs in `composer.json` / `composer.lock` on the next install or update.
+
+Quick search across a project:
+
+```bash
+rg -n 'git@bitbucket\.org|ssh://git@bitbucket\.org' .
+```
+
+---
+
 ## Options
 
 ### Bash — `migrate-bitbucket-ssh.sh`
@@ -185,16 +213,9 @@ No. Only the **hostname** changes. Existing user SSH keys and deploy keys still 
 
 No. Only Bitbucket Cloud hostnames (`bitbucket.org` / `ssh.bitbucket.org`).
 
-### What about CI/CD, Docker, and deploy scripts?
+### What about CI/CD, Docker, Composer, and deploy scripts?
 
-This tool updates **local Git remotes**. Also search pipelines and automation for:
-
-```text
-git@bitbucket.org:
-ssh://git@bitbucket.org
-```
-
-and replace with `ssh.bitbucket.org`. Allowlist `ssh.bitbucket.org` on port 22 if your network filters outbound SSH.
+This tool updates **local Git remotes** only. Config files such as `composer.json` must be changed manually — see [Notes — files you must update manually](#notes--files-you-must-update-manually). Allowlist `ssh.bitbucket.org` on port 22 if your network filters outbound SSH.
 
 ---
 
