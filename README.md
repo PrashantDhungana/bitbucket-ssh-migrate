@@ -1,83 +1,94 @@
-# Bitbucket Cloud SSH migrate
+# Bitbucket SSH Migrate — `bitbucket.org` → `ssh.bitbucket.org`
 
-Helper scripts that rewrite local Git remotes from the legacy Bitbucket Cloud SSH host (`bitbucket.org`) to the new host (`ssh.bitbucket.org`).
+**Fix Bitbucket Cloud Git SSH before it breaks.** Scan a folder of local clones and rewrite remotes from the legacy host `git@bitbucket.org` to the new host `git@ssh.bitbucket.org`.
 
-Atlassian is splitting HTTPS and SSH traffic. After the cut-over (final removal **10/Dec/2026**, with brownouts from **12/Nov/2026**), Git over SSH must use:
+> **Deadline:** Atlassian brownouts start **12/Nov/2026**. Final removal of SSH on `bitbucket.org` is **10/Dec/2026**.
+>
+> Official announcement: [Upcoming change to Bitbucket Cloud SSH access](https://community.atlassian.com/forums/discussion/3234032/upcoming-change-to-bitbucket-cloud-ssh-access-move-from-bitbucket-org-to-ssh-bitbucket-org)
 
-```text
-git@ssh.bitbucket.org:<workspace>/<repo>.git
-```
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Linux%20%7C%20Windows-informational)](#quick-start)
+[![GitHub stars](https://img.shields.io/github/stars/PrashantDhungana/bitbucket-ssh-migrate?style=social)](https://github.com/PrashantDhungana/bitbucket-ssh-migrate)
 
-instead of:
+**Keywords:** Bitbucket Cloud SSH migration, `ssh.bitbucket.org`, update `git@bitbucket.org` remotes, Git remote URL rewrite, Atlassian SSH hostname change, Bitbucket brownout, host key verification, known_hosts.
+
+---
+
+## Why this exists
+
+Bitbucket Cloud is splitting HTTPS and SSH traffic:
+
+| Protocol | Host |
+| --- | --- |
+| HTTPS (web, API, `git clone` HTTPS) | `bitbucket.org` — unchanged |
+| Git over SSH (`clone` / `fetch` / `pull` / `push`) | **`ssh.bitbucket.org`** — required |
+
+If your remotes still look like this:
 
 ```text
 git@bitbucket.org:<workspace>/<repo>.git
 ```
 
-HTTPS remotes are **not** affected and are left alone.
+you need:
 
-Source announcement: [Upcoming change to Bitbucket Cloud SSH access](https://community.atlassian.com/forums/discussion/3234032/upcoming-change-to-bitbucket-cloud-ssh-access-move-from-bitbucket-org-to-ssh-bitbucket-org)
+```text
+git@ssh.bitbucket.org:<workspace>/<repo>.git
+```
 
-## Requirements
+Doing that one repo at a time is slow. This tool walks a projects folder (or any path you pass) and updates every matching Git remote in one go — dry-run first, apply when ready.
 
-- Git
-- Bash script: macOS, Linux, or Windows via Git Bash / WSL
-- PowerShell script: Windows PowerShell 5.1+ or PowerShell 7+
+---
 
 ## Quick start
 
-### Preview (safe — no changes)
+### One-liner (Bash — macOS / Linux / Git Bash / WSL)
 
-**Bash**
+Preview changes under a projects folder (safe — no writes):
 
 ```bash
+git clone https://github.com/PrashantDhungana/bitbucket-ssh-migrate.git
+cd bitbucket-ssh-migrate
 chmod +x migrate-bitbucket-ssh.sh
 ./migrate-bitbucket-ssh.sh ~/projects
 ```
 
-**PowerShell**
-
-```powershell
-.\Migrate-BitbucketSsh.ps1 -Path C:\Users\you\projects
-```
-
-### Apply changes
-
-**Bash**
-
-```bash
-./migrate-bitbucket-ssh.sh ~/projects --apply
-```
-
-**PowerShell**
-
-```powershell
-.\Migrate-BitbucketSsh.ps1 -Path C:\Users\you\projects -Apply
-```
-
-### Apply and trust the new SSH host key
-
-**Bash**
+Apply the migration + seed `known_hosts` for `ssh.bitbucket.org`:
 
 ```bash
 ./migrate-bitbucket-ssh.sh ~/projects --apply --known-hosts
 ```
 
-**PowerShell**
+### PowerShell (Windows)
 
 ```powershell
+git clone https://github.com/PrashantDhungana/bitbucket-ssh-migrate.git
+cd bitbucket-ssh-migrate
+.\Migrate-BitbucketSsh.ps1 -Path C:\Users\you\projects
 .\Migrate-BitbucketSsh.ps1 -Path C:\Users\you\projects -Apply -KnownHosts
 ```
+
+### Single-repo manual alternative
+
+If you only have one clone:
+
+```bash
+git remote set-url origin git@ssh.bitbucket.org:<workspace>/<repo>.git
+git remote -v
+```
+
+Use this repo when you have **many local Bitbucket clones** to update.
+
+---
 
 ## What it does
 
 1. Recursively finds Git repositories under the folder you pass
-2. For each remote URL that still uses SSH against `bitbucket.org`, rewrites it to `ssh.bitbucket.org`
-3. Skips remotes that already use `ssh.bitbucket.org`
-4. Skips HTTPS / other hosts
-5. Optionally seeds `~/.ssh/known_hosts` using Atlassian’s published keys (hostname rewritten to `ssh.bitbucket.org`)
+2. Rewrites SSH remotes still pointing at `bitbucket.org` → `ssh.bitbucket.org`
+3. Skips remotes already on `ssh.bitbucket.org`
+4. Leaves HTTPS remotes (`https://bitbucket.org/...`) untouched
+5. Optionally seeds `~/.ssh/known_hosts` from [Atlassian’s published SSH keys](https://bitbucket.org/site/ssh)
 
-Supported URL shapes:
+### URL rewrites
 
 | Before | After |
 | --- | --- |
@@ -86,52 +97,44 @@ Supported URL shapes:
 | `ssh://git@bitbucket.org:22/ws/repo.git` | `ssh://git@ssh.bitbucket.org:22/ws/repo.git` |
 | `https://bitbucket.org/ws/repo.git` | unchanged |
 
+---
+
 ## Options
 
-### Bash (`migrate-bitbucket-ssh.sh`)
+### Bash — `migrate-bitbucket-ssh.sh`
 
 | Option | Meaning |
 | --- | --- |
 | `FOLDER` or `-p` / `--path DIR` | Folder to scan (default: current directory) |
-| `-n` / `--dry-run` | Preview only (default) |
+| `-n` / `--dry-run` | Preview only (**default**) |
 | `-a` / `--apply` | Write remote URL changes |
-| `-d` / `--max-depth N` | Limit search depth for repos |
+| `-d` / `--max-depth N` | Limit how deep to search for repos |
 | `-k` / `--known-hosts` | Seed SSH known hosts for `ssh.bitbucket.org` |
 | `-q` / `--quiet` | Less chatter |
 | `-h` / `--help` | Help |
 
-### PowerShell (`Migrate-BitbucketSsh.ps1`)
+```bash
+./migrate-bitbucket-ssh.sh /Users/shared/dev --max-depth 2
+./migrate-bitbucket-ssh.sh ~/Herd --apply --known-hosts
+```
+
+### PowerShell — `Migrate-BitbucketSsh.ps1`
 
 | Parameter | Meaning |
 | --- | --- |
 | `-Path` | Folder to scan (default: current directory) |
-| *(no `-Apply`)* | Preview only (default) |
+| *(no `-Apply`)* | Preview only (**default**) |
 | `-Apply` | Write remote URL changes |
-| `-MaxDepth` | Limit search depth for repos |
-| `-KnownHosts` | Seed SSH known hosts for `ssh.bitbucket.org` |
+| `-MaxDepth` | Limit search depth |
+| `-KnownHosts` | Seed SSH known hosts |
 | `-Quiet` | Less chatter |
 
-## Examples for teams
-
-Scan a shared projects directory without changing anything:
-
-```bash
-./migrate-bitbucket-ssh.sh /Users/shared/dev --max-depth 2
+```powershell
+.\Migrate-BitbucketSsh.ps1 -Path C:\dev -MaxDepth 2
+.\Migrate-BitbucketSsh.ps1 -Path C:\dev -Apply -KnownHosts
 ```
 
-Update only one machine’s clones, then verify:
-
-```bash
-./migrate-bitbucket-ssh.sh ~/Herd --apply
-cd ~/Herd/some-repo && git remote -v
-```
-
-## What this script does **not** do
-
-- It does not edit CI/CD YAML, Dockerfiles, or deploy scripts. Search those separately for `git@bitbucket.org` / `ssh://git@bitbucket.org`.
-- It does not change firewall / allowlist rules for `ssh.bitbucket.org`.
-- It does not regenerate SSH keys or deploy keys (not required for this hostname change).
-- It does not migrate Bitbucket Server / Data Center hosts — only Bitbucket Cloud (`bitbucket.org`).
+---
 
 ## Verify after migration
 
@@ -140,8 +143,79 @@ git remote -v
 ssh -T git@ssh.bitbucket.org
 ```
 
-The SSH host key fingerprints published by Atlassian (same keys, new hostname) are listed in the community post linked above.
+You should see remotes using `git@ssh.bitbucket.org:` and a successful SSH handshake (or Bitbucket’s authenticated greeting).
+
+---
+
+## FAQ / searchable errors
+
+### “SSH access via bitbucket.org is deprecated” / brownout failures
+
+During Atlassian’s brownout windows, SSH to `bitbucket.org` is temporarily blocked. Migrate remotes to `ssh.bitbucket.org` with this script, then retry `git fetch` / `git push`.
+
+### `Host key verification failed` for `ssh.bitbucket.org`
+
+Trust the new host (same keys as `bitbucket.org`, new hostname):
+
+```bash
+./migrate-bitbucket-ssh.sh --known-hosts --apply
+# or Atlassian's one-liner:
+curl -s https://bitbucket.org/site/ssh | sed 's/bitbucket.org/ssh.bitbucket.org/' >> ~/.ssh/known_hosts
+```
+
+### `git push` / `git pull` suddenly fails only on Bitbucket SSH
+
+Check remotes:
+
+```bash
+git remote -v | grep bitbucket
+```
+
+If you still see `git@bitbucket.org:`, rewrite them (or run this tool on your projects folder).
+
+### Does this affect HTTPS remotes?
+
+No. `https://bitbucket.org/<workspace>/<repo>.git` keeps working.
+
+### Do I need new SSH keys or deploy keys?
+
+No. Only the **hostname** changes. Existing user SSH keys and deploy keys still apply.
+
+### Will this touch Bitbucket Server / Data Center?
+
+No. Only Bitbucket Cloud hostnames (`bitbucket.org` / `ssh.bitbucket.org`).
+
+### What about CI/CD, Docker, and deploy scripts?
+
+This tool updates **local Git remotes**. Also search pipelines and automation for:
+
+```text
+git@bitbucket.org:
+ssh://git@bitbucket.org
+```
+
+and replace with `ssh.bitbucket.org`. Allowlist `ssh.bitbucket.org` on port 22 if your network filters outbound SSH.
+
+---
+
+## Requirements
+
+- Git
+- Bash script: macOS, Linux, Windows (Git Bash or WSL)
+- PowerShell script: Windows PowerShell 5.1+ or PowerShell 7+
+
+---
+
+## Contributing
+
+Issues and PRs welcome — especially docs for team rollout, CI snippets, and edge-case remotes.
+
+If this saves you time before the **10/Dec/2026** cut-over, a ⭐ helps other developers find it.
+
+---
 
 ## Licence
 
 MIT — see [LICENSE](LICENSE).
+
+**Not affiliated with Atlassian.** Built for developers dealing with the Bitbucket Cloud SSH hostname migration.
