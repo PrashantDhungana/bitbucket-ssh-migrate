@@ -99,27 +99,33 @@ Use this repo when you have **many local Bitbucket clones** to update.
 
 ---
 
-## Notes — files you must update manually
+## Notes
 
-This script only changes **Git remotes** inside local clones (and optionally `known_hosts`). It does **not** edit project config files.
+This script is for **any Bitbucket Cloud project** (any language or stack). It only rewrites **Git remotes** on local clones (and optionally seeds `known_hosts`).
 
-You still need to update Bitbucket SSH URLs by hand (or with your own search/replace) in places such as:
+It does **not** change files inside the repo that hard-code the old SSH host. Anything that still says `git@bitbucket.org` or `ssh://git@bitbucket.org` needs a **manual** update, for example:
 
-- `composer.json` / `composer.lock` — e.g. `repositories[].url` and lockfile `source.url` values like `git@bitbucket.org:...`
-- CI/CD configs (`bitbucket-pipelines.yml`, GitHub Actions, Jenkins, etc.)
-- Dockerfiles, deploy scripts, Makefiles, and other tooling that hard-codes `git@bitbucket.org` or `ssh://git@bitbucket.org`
-- Package manifests that vendor from Bitbucket over SSH (npm/git deps, private package registries, submodules listed in `.gitmodules`, etc.)
+- Dependency / package manifests and lockfiles
+- CI/CD pipeline configs
+- Dockerfiles, deploy scripts, Makefiles, build tooling
+- Git submodules (`.gitmodules`)
+- Docs, templates, or scripts that paste clone URLs
 
-Example Composer change:
+Replace the host wherever it appears:
 
 ```diff
-- "url": "git@bitbucket.org:workspace/package.git"
-+ "url": "git@ssh.bitbucket.org:workspace/package.git"
+- git@bitbucket.org:workspace/repo.git
++ git@ssh.bitbucket.org:workspace/repo.git
 ```
 
-After updating `composer.json`, refresh the lockfile / reinstall so installs keep working after the cut-over. Rewriting remotes under `vendor/` alone is not enough — Composer will still use the URLs in `composer.json` / `composer.lock` on the next install or update.
+```diff
+- ssh://git@bitbucket.org/workspace/repo.git
++ ssh://git@ssh.bitbucket.org/workspace/repo.git
+```
 
-Quick search across a project:
+After changing those files, re-run whatever install or sync step your project uses so generated/vendor copies pick up the new URLs.
+
+Find leftovers in a project:
 
 ```bash
 rg -n 'git@bitbucket\.org|ssh://git@bitbucket\.org' .
@@ -213,9 +219,9 @@ No. Only the **hostname** changes. Existing user SSH keys and deploy keys still 
 
 No. Only Bitbucket Cloud hostnames (`bitbucket.org` / `ssh.bitbucket.org`).
 
-### What about CI/CD, Docker, Composer, and deploy scripts?
+### What about CI/CD, Docker, package manifests, and deploy scripts?
 
-This tool updates **local Git remotes** only. Config files such as `composer.json` must be changed manually — see [Notes — files you must update manually](#notes--files-you-must-update-manually). Allowlist `ssh.bitbucket.org` on port 22 if your network filters outbound SSH.
+This tool updates **local Git remotes** only. Hard-coded SSH URLs in project files must be changed manually — see [Notes](#notes). Allowlist `ssh.bitbucket.org` on port 22 if your network filters outbound SSH.
 
 ---
 
